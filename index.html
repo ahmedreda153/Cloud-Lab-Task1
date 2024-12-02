@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <title>Cloud Lab Task 1</title>
+  </head>
+
+  <body>
+    <div style="display: flex">
+      <span class="welcome">Welcome <span id="userName"></span></span>
+    </div>
+    <div class="container">
+      <div class="section">
+        <h1>Cloud Lab Task 1</h1>
+        <div>
+          <h3>Add a new document or channel</h3>
+          <form id="addDocumentForm">
+            <div class="form-group">
+              <label for="channel">Channel Name</label>
+              <div class="group">
+                <input type="text" id="channel" name="channel" />
+                <button type="submit" class="button">Add</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <hr />
+        <div>
+          <h3>Channels</h3>
+          <ul id="channels"></ul>
+        </div>
+      </div>
+
+      <div class="section">
+        <h1>Realtime Database Chat</h1>
+        <div>
+          <div class="chat">
+            <h3>Messages</h3>
+            <p id="topic-title" style="display: none">
+              (Topic: <span id="topic"></span>)
+            </p>
+          </div>
+          <ul id="messages" class="messages"></ul>
+        </div>
+        <div>
+          <form id="sendMessageForm">
+            <div
+              class="form-group"
+              style="
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 0 10px;
+              "
+            >
+              <label for="message">Enter Message</label>
+              <div class="group">
+                <input type="text" id="message" name="message" />
+                <button type="submit" class="button">Send</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      const userName = prompt("Enter your name: ");
+      console.log("User Name: ", userName);
+      document.getElementById("userName").textContent = userName;
+
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+      import {
+        getMessaging,
+        getToken,
+        onMessage,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js";
+      import {
+        getDatabase,
+        ref,
+        push,
+        onValue,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+      // TODO: Add SDKs for Firebase products that you want to use
+      // https://firebase.google.com/docs/web/setup#available-libraries
+
+      // Your web app's Firebase configuration
+      // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      const firebaseConfig = {
+        apiKey: "AIzaSyByS8uv4twbCpyREd6Bo2q2BTFOT9TaS2s",
+        authDomain: "cloud-lab-task-1-2c614.firebaseapp.com",
+        projectId: "cloud-lab-task-1-2c614",
+        storageBucket: "cloud-lab-task-1-2c614.firebasestorage.app",
+        messagingSenderId: "1063162700358",
+        appId: "1:1063162700358:web:c0c3b06df6f8873ca66047",
+        measurementId: "G-V5TCGQ3XCE",
+      };
+
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      const messaging = getMessaging(app);
+      onMessage(messaging, (payload) => {
+        console.log("Message received. ", payload);
+      });
+
+      navigator.serviceWorker.register("sw.js").then((registration) => {
+        console.log("Requesting permission...");
+        Notification.requestPermission().then((permission) => {
+          if (permission === "granted") {
+            console.log("Notification permission granted.");
+            getToken(messaging, {
+              serviceWorkerRegistration: registration,
+              vapidKey:
+                "BJK-oD0-HSnitLAJUeTCc7eW_Jc4IBuG0XHlYMMllCFnNHSIKz7zim5m8ePSiBWjN-TjEZ-Ss4vjcQYLceyIHvU",
+            })
+              .then((currentToken) => {
+                if (currentToken) {
+                  console.log("Token: ", currentToken);
+                  const response = fetch(
+                    "http://localhost:5000/get-documents?collection=channels",
+                    {
+                      method: "GET",
+                      headers: {
+                        Authorization: `Bearer ${currentToken}`,
+                      },
+                    }
+                  )
+                    .then((response) => response.json())
+                    .then((data) => {
+                      console.log(data);
+                      const channels = document.getElementById("channels");
+                      data.forEach((channel) => {
+                        const li = document.createElement("li");
+                        channels.appendChild(li);
+                        const span = document.createElement("span");
+                        span.textContent = channel.topic;
+                        li.appendChild(span);
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.name = `${channel.topic}-checkbox`;
+                        checkbox.value = channel.topic;
+                        checkbox.addEventListener("change", async (e) => {
+                          const body = {
+                            token: currentToken,
+                            topic: channel.topic,
+                          };
+                          const response = await fetch(
+                            `http://localhost:5000/${
+                              e.target.checked ? "" : "un"
+                            }subscribe-topic`,
+                            {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify(body),
+                            }
+                          );
+                          const data = await response.json();
+                          console.log(data);
+                          if (response.ok) {
+                            if (e.target.checked) {
+                              alert(`Subscribed to ${channel.topic} topic`);
+                            } else {
+                              alert(`Unsubscribed from ${channel.topic} topic`);
+                            }
+                          }
+                        });
+                        li.appendChild(checkbox);
+                        // add anchor to open chat
+                        const chatButton = document.createElement("button");
+                        chatButton.className = "chat-button";
+                        chatButton.textContent = "Open Chat";
+                        chatButton.addEventListener("click", () => {
+                          const topic = channel.topic;
+                          document.getElementById("topic-title").style.display =
+                            "block";
+                          document.getElementById("topic").textContent = topic;
+                          const messages = document.getElementById("messages");
+                          const db = getDatabase();
+                          onValue(
+                            ref(db, `channels/${topic}/messages`),
+                            (snapshot) => {
+                              messages.innerHTML = "";
+                              snapshot.forEach((childSnapshot) => {
+                                const childData = childSnapshot.val();
+                                const li = document.createElement("li");
+                                li.textContent = childData.message;
+                                if (childData.author === userName) {
+                                  li.className = "message-item author";
+                                } else {
+                                  li.className = "message-item";
+                                }
+                                messages.appendChild(li);
+                              });
+                            }
+                          );
+                        });
+                        li.appendChild(chatButton);
+
+                        const button = document.createElement("button");
+                        button.className = "delete-button";
+                        button.textContent = "Delete";
+                        button.addEventListener("click", async () => {
+                          const body = {
+                            collection: "channels",
+                            documentName: channel.topic,
+                          };
+                          const response = await fetch(
+                            "http://localhost:5000/delete-document",
+                            {
+                              method: "DELETE",
+                              headers: {
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify(body),
+                            }
+                          );
+                          const data = await response.json();
+                          console.log(data);
+
+                          if (response.ok) {
+                            alert(`Deleted ${channel.topic} channel`);
+                            window.location.reload();
+                          }
+                        });
+                        li.appendChild(button);
+                      });
+                    })
+                    .catch((err) => {
+                      console.log(err);
+                    });
+                } else {
+                  console.log(
+                    "No registration token available. Request permission to generate one."
+                  );
+                }
+              })
+              .catch((err) => {
+                console.log("An error occurred while retrieving token. ", err);
+              });
+          } else {
+            console.log("Unable to get permission to notify.");
+          }
+        });
+      });
+
+      // handle form submission
+      const form = document.getElementById("addDocumentForm");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const channel = form.channel.value;
+        console.log("Channel: ", channel);
+
+        const body = {
+          collection: "channels",
+          documentName: channel,
+          document: {
+            topic: channel,
+          },
+        };
+
+        const response = await fetch("http://localhost:5000/add-document", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json();
+        console.log(data);
+
+        if (response.ok) {
+          // Dynamically add the new channel to the list
+          const channels = document.getElementById("channels");
+          const li = document.createElement("li");
+          const span = document.createElement("span");
+          span.textContent = channel;
+          li.appendChild(span);
+
+          // Add checkbox for subscription
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.name = `${channel}-checkbox`;
+          checkbox.value = channel;
+          checkbox.addEventListener("change", async (e) => {
+            const body = {
+              token: currentToken,
+              topic: channel,
+            };
+            const response = await fetch(
+              `http://localhost:5000/${
+                e.target.checked ? "" : "un"
+              }subscribe-topic`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(body),
+              }
+            );
+            const data = await response.json();
+            console.log(data);
+            if (response.ok) {
+              alert(
+                e.target.checked
+                  ? `Subscribed to ${channel} topic`
+                  : `Unsubscribed from ${channel} topic`
+              );
+            }
+          });
+          li.appendChild(checkbox);
+
+          // Add Open Chat button
+          const chatButton = document.createElement("button");
+          chatButton.className = "chat-button";
+          chatButton.textContent = "Open Chat";
+          chatButton.addEventListener("click", () => {
+            const topic = channel;
+            document.getElementById("topic-title").style.display = "block";
+            document.getElementById("topic").textContent = topic;
+            const messages = document.getElementById("messages");
+            const db = getDatabase();
+            onValue(ref(db, `channels/${topic}/messages`), (snapshot) => {
+              messages.innerHTML = "";
+              snapshot.forEach((childSnapshot) => {
+                const childData = childSnapshot.val();
+                const li = document.createElement("li");
+                li.textContent = childData.message;
+                if (childData.author === userName) {
+                  li.className = "message-item author";
+                } else {
+                  li.className = "message-item";
+                }
+                messages.appendChild(li);
+              });
+            });
+          });
+          li.appendChild(chatButton);
+
+          // Add Delete button
+          const button = document.createElement("button");
+          button.className = "delete-button";
+          button.textContent = "Delete";
+          button.addEventListener("click", async () => {
+            const body = {
+              collection: "channels",
+              documentName: channel,
+            };
+            const response = await fetch(
+              "http://localhost:5000/delete-document",
+              {
+                method: "DELETE",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(body),
+              }
+            );
+            const data = await response.json();
+            console.log(data);
+
+            if (response.ok) {
+              alert(`Deleted ${channel} channel`);
+              window.location.reload();
+            }
+          });
+          li.appendChild(button);
+
+          channels.appendChild(li);
+
+          form.channel.value = "";
+        } else {
+          console.error("Failed to add channel:", data);
+        }
+      });
+
+      // handle sending messages
+      const sendMessageForm = document.getElementById("sendMessageForm");
+      sendMessageForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const message = sendMessageForm.message.value;
+        console.log("Message: ", message);
+        const topic = document.getElementById("topic").textContent;
+        console.log("Topic: ", topic);
+
+        const body = {
+          topic: topic,
+          message: message,
+          timestamp: Date.now(),
+          author: userName,
+        };
+        const db = getDatabase();
+        push(ref(db, `channels/${topic}/messages`), body);
+
+        sendMessageForm.message.value = "";
+      });
+    </script>
+  </body>
+</html>
