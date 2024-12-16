@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/style/index.css" />
+    <title>Cloud Lab Task 1</title>
+  </head>
+
+  <body>
+    <div class="header">
+      <span class="welcome">Welcome <span id="userName"></span></span>
+    </div>
+    <div class="container">
+      <div class="section">
+        <h1>Cloud Lab Task 1</h1>
+        <div>
+          <h3>Add a new document or channel</h3>
+          <form id="addDocumentForm">
+            <div class="form-group">
+              <label for="channel">Channel Name</label>
+              <div class="group">
+                <input type="text" id="channel" name="channel" />
+                <button type="submit" class="button">Add</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <hr />
+        <div>
+          <h3>Channels</h3>
+          <ul id="channels"></ul>
+        </div>
+      </div>
+
+      <div class="section">
+        <h1>Realtime Database Chat</h1>
+        <div>
+          <div class="chat">
+            <h3>Messages</h3>
+            <p id="topic-title" style="display: none">
+              (Topic: <span id="topic"></span>)
+            </p>
+          </div>
+          <ul id="messages" class="messages"></ul>
+        </div>
+        <div>
+          <form id="sendMessageForm">
+            <div
+              class="form-group"
+              style="
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 0 10px;
+              "
+            >
+              <label for="message">Enter Message</label>
+              <div class="group">
+                <input type="text" id="message" name="message" />
+                <button type="submit" class="button">Send</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="logout-container">
+      <button id="logoutButton">Logout</button>
+    </div>
+
+    <script type="module" src="/src/js/config.js"></script>
+    <script type="module">
+      import {
+        getMessaging,
+        getToken,
+        onMessage,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js";
+      import {
+        getDatabase,
+        ref,
+        push,
+        onValue,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+      import {
+        getAnalytics,
+        logEvent,
+      } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+      import { app } from "/src/js/config.js";
+
+      const analytics = getAnalytics(app);
+      const auth = getAuth(app);
+      const messaging = getMessaging(app);
+      const db = getDatabase(app);
+
+      // Global variables to store user and token
+      let currentUser = null;
+      let currentToken = null;
+      let userTopics = [];
+
+      // Check authentication state on page load
+      function checkAuthState() {
+        onAuthStateChanged(auth, (user) => {
+          if (!user) {
+            window.location.href = "/src/pages/auth.html";
+            return;
+          }
+
+          fetch(
+            `http://localhost:5000/get-user?uid=${encodeURIComponent(
+              user.uid
+            )}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          )
+            .then((response) => {
+              if (!response.ok) {
+                console.error("Failed to get user data");
+              }
+              return response.json();
+            })
+            .then((data) => {
+              if (data.user) {
+                currentUser = data.user;
+                currentToken = data.user.token;
+                userTopics = data.user.topics || [];
+                initializeApp(data.user);
+              }
+            })
+            .catch((error) => {
+              console.error("Error fetching user data:", error.message);
+            });
+        });
+      }
+
+      // Logout functionality
+      function setupLogoutButton() {
+        const logoutButton = document.getElementById("logoutButton");
+        logoutButton.addEventListener("click", async () => {
+          try {
+            await signOut(auth);
+            window.location.href = "/src/pages/auth.html";
+          } catch (error) {
+            console.error("Logout error:", error);
+            alert("Failed to log out. Please try again.");
+          }
+        });
+      }
+
+      function initializeApp(user) {
+        // Set welcome message
+        const userNameElement = document.getElementById("userName");
+        if (userNameElement) {
+          userNameElement.textContent =
+            user.name || user.email || user.phoneNumber || "User";
+        }
+
+        // Set up messaging and notifications
+        setupMessaging(user);
+
+        // Set up channels and chat functionalities
+        setupChannels(user);
+        setupMessageSending(user);
+      }
+
+      function setupMessaging(user) {
+        navigator.serviceWorker
+          .register("/src/js/sw.js")
+          .then((registration) => {
+            Notification.requestPermission().then((permission) => {
+              if (permission === "granted") {
+                getToken(messaging, {
+                  serviceWorkerRegistration: registration,
+                  vapidKey:
+                    "BJK-oD0-HSnitLAJUeTCc7eW_Jc4IBuG0XHlYMMllCFnNHSIKz7zim5m8ePSiBWjN-TjEZ-Ss4vjcQYLceyIHvU",
+                })
+                  .then((token) => {
+                    if (token) {
+                      currentToken = token;
+                      // Send token to server and update user's topics
+                      updateUserToken(user, token);
+                    }
+                  })
+                  .catch((err) => {
+                    console.error("Token retrieval error:", err);
+                  });
+              }
+            });
+          });
+
+        // Handle incoming messages
+        onMessage(messaging, (payload) => {
+          if (payload.notification) {
+            const { title, body } = payload.notification;
+            if (Notification.permission === "granted") {
+              new Notification(title, { body: body });
+            } else {
+              alert(`${title}: ${body}`);
+            }
+          }
+        });
+      }
+
+      async function updateUserToken(user, token) {
+        try {
+          const response = await fetch(
+            "http://localhost:5000/update-user-token",
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                uid: user.uid,
+                name: user.name,
+                email: user.email,
+                token: token,
+              }),
+            }
+          );
+          const data = await response.json();
+          console.log("User token updated:", data);
+        } catch (error) {
+          console.error("Token update error:", error);
+        }
+      }
+
+      function setupChannels(user) {
+        const form = document.getElementById("addDocumentForm");
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const channel = form.channel.value;
+
+          try {
+            const response = await fetch("http://localhost:5000/add-topic", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                collection: "channels",
+                topicName: channel,
+                topic: {
+                  topic: channel,
+                  createdBy: user.uid,
+                },
+              }),
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+              await fetchChannels(user);
+              form.channel.value = "";
+            } else {
+              console.error("Failed to add channel:", data);
+              alert(data.message || "Failed to create channel");
+            }
+          } catch (error) {
+            console.error("Channel addition error:", error);
+            alert("An error occurred while creating the channel");
+          }
+        });
+
+        // Fetch and display channels
+        fetchChannels(user);
+      }
+
+      async function fetchChannels(user) {
+        try {
+          const response = await fetch(
+            "http://localhost:5000/get-topics?collection=channels",
+            { method: "GET" }
+          );
+          const data = await response.json();
+          const channelsList = document.getElementById("channels");
+          channelsList.innerHTML = ""; // Clear existing channels
+
+          data.forEach((channel) => {
+            const li = document.createElement("li");
+            const span = document.createElement("span");
+            span.textContent = channel.topic;
+            li.appendChild(span);
+
+            // Subscription checkbox
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = `${channel.topic}-checkbox`;
+            checkbox.value = channel.topic;
+            checkbox.checked = userTopics.includes(channel.topic);
+
+            checkbox.addEventListener("change", async (e) => {
+              try {
+                const body = {
+                  token: currentToken,
+                  topic: channel.topic,
+                };
+                const response = await fetch(
+                  `http://localhost:5000/${
+                    e.target.checked ? "" : "un"
+                  }subscribe-topic`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(body),
+                  }
+                );
+
+                const data = await response.json();
+                if (response.ok) {
+                  // Update local topics
+                  if (e.target.checked) {
+                    if (!userTopics.includes(channel.topic)) {
+                      userTopics.push(channel.topic);
+                    }
+                  } else {
+                    const index = userTopics.indexOf(channel.topic);
+                    if (index > -1) {
+                      userTopics.splice(index, 1);
+                    }
+                  }
+
+                  const updateUserTopicsResponse = await fetch(
+                    "http://localhost:5000/update-user-topics",
+                    {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        uid: user.uid,
+                        topics: userTopics,
+                      }),
+                    }
+                  );
+
+                  const updateUserTopicsData =
+                    await updateUserTopicsResponse.json();
+                  if (updateUserTopicsResponse.ok) {
+                    console.log("User topics updated:", updateUserTopicsData);
+                  } else {
+                    console.error(
+                      "Failed to update user topics:",
+                      updateUserTopicsData
+                    );
+                  }
+
+                  // Log analytics event
+                  logEvent(analytics, "channel_subscription", {
+                    channel: channel.topic,
+                    subscribed: e.target.checked,
+                  });
+
+                  alert(
+                    e.target.checked
+                      ? `Subscribed to ${channel.topic}`
+                      : `Unsubscribed from ${channel.topic}`
+                  );
+                }
+              } catch (error) {
+                console.error("Subscription error:", error);
+                alert("Failed to update subscription");
+              }
+            });
+            li.appendChild(checkbox);
+
+            // Open Chat button
+            const chatButton = document.createElement("button");
+            chatButton.className = "chat-button";
+            chatButton.textContent = "Open Chat";
+            chatButton.addEventListener("click", () => {
+              openChannelChat(channel.topic);
+            });
+            li.appendChild(chatButton);
+
+            const deleteButton = document.createElement("button");
+            deleteButton.className = "delete-button";
+            deleteButton.textContent = "Delete";
+            deleteButton.addEventListener("click", async () => {
+              try {
+                const response = await fetch(
+                  "http://localhost:5000/delete-topic",
+                  {
+                    method: "DELETE",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      collection: "channels",
+                      topicName: channel.topic,
+                    }),
+                  }
+                );
+
+                const data = await response.json();
+                if (response.ok) {
+                  await fetchChannels(user);
+                } else {
+                  console.error("Delete channel error:", data);
+                  alert(data.message || "Failed to delete channel");
+                }
+              } catch (error) {
+                console.error("Channel deletion error:", error);
+                alert("An error occurred while deleting the channel");
+              }
+            });
+            li.appendChild(deleteButton);
+
+            channelsList.appendChild(li);
+          });
+        } catch (error) {
+          console.error("Channels fetch error:", error);
+          alert("Failed to load channels");
+        }
+      }
+
+      function openChannelChat(topic) {
+        const topicTitleElement = document.getElementById("topic-title");
+        const topicElement = document.getElementById("topic");
+        const messagesContainer = document.getElementById("messages");
+
+        if (topicTitleElement) topicTitleElement.style.display = "block";
+        if (topicElement) topicElement.textContent = topic;
+
+        // Clear previous messages
+        if (messagesContainer) messagesContainer.innerHTML = "";
+
+        // Listen for messages in this channel
+        onValue(ref(db, `channels/${topic}/messages`), (snapshot) => {
+          if (messagesContainer) {
+            messagesContainer.innerHTML = "";
+            snapshot.forEach((childSnapshot) => {
+              const childData = childSnapshot.val();
+              console.log("Message:", childData);
+              console.log("currentUser:", currentUser);
+
+              const li = document.createElement("li");
+              li.textContent = `${childData.author}: ${childData.message}`;
+
+              // Highlight messages from current user
+              if (childData.authorUid === currentUser.uid) {
+                li.classList.add("message-item", "author");
+              } else {
+                li.classList.add("message-item");
+              }
+
+              messagesContainer.appendChild(li);
+            });
+
+            // Scroll to bottom of messages
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        });
+      }
+
+      function setupMessageSending(user) {
+        const sendMessageForm = document.getElementById("sendMessageForm");
+        sendMessageForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const messageInput = sendMessageForm.message;
+          const message = messageInput.value.trim();
+          const topic = document.getElementById("topic").textContent;
+
+          if (!message) return;
+
+          const messageData = {
+            topic: topic,
+            message: message,
+            timestamp: Date.now(),
+            author: user.displayName || user.email,
+            authorUid: user.uid,
+          };
+
+          try {
+            // Send message to Firebase Realtime Database
+            push(ref(db, `channels/${topic}/messages`), messageData);
+
+            // Send notification to subscribed users
+            const notificationResponse = await fetch(
+              "http://localhost:5000/send-notification",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  topic: topic,
+                  notification: {
+                    title: `New Message in ${topic}`,
+                    body: `${messageData.author}: ${message}`,
+                  },
+                }),
+              }
+            );
+
+            // Clear message input
+            messageInput.value = "";
+          } catch (error) {
+            console.error("Message sending error:", error);
+            alert("Failed to send message");
+          }
+        });
+      }
+
+      // Initialize the application
+      document.addEventListener("DOMContentLoaded", () => {
+        setupLogoutButton();
+        checkAuthState();
+      });
+    </script>
+  </body>
+</html>

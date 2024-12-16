@@ -11,6 +11,15 @@ body {
   background-color: #f4f4f4;
 }
 
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.header {
+  display: flex;
+  justify-content: center;
+}
+
 .welcome {
   background-color: #333;
   color: white;
@@ -196,6 +205,21 @@ li input[type="checkbox"] {
 .chat h3,
 .chat p {
   margin: 0;
+}
+
+.logout-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+#logoutButton {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 /* Responsive Design */
