@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 16 # Replace with the version you need
+          node-version: 20 # Replace with the version you need
 
       # Install dependencies for the FE
       - name: Install Dependencies
