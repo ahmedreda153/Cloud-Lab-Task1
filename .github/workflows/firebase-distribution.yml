@@ -1,0 +1,43 @@
+name: Firebase App Distribution
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+  pull_request:
+    branches:
+      - main  # Trigger on pull requests to main branch
+
+jobs:
+  build-and-distribute:
+    name: Build and Distribute to Firebase
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # Set up Node.js for the frontend
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16  # Replace with the version you need
+
+    # Install dependencies for the FE
+    - name: Install Dependencies
+      working-directory: ./FE
+      run: npm install
+
+    # Build the FE app
+    - name: Build Frontend
+      working-directory: ./FE
+      run: npm run build
+
+    # Deploy to Firebase App Distribution
+    - name: Deploy to Firebase App Distribution
+      working-directory: ./FE
+      env:
+        FIREBASE_AUTH_TOKEN: ${{ secrets.FIREBASE_AUTH_TOKEN }}
+      run: |
+        firebase deploy --only hosting,appdistribution
