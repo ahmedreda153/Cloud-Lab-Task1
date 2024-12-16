@@ -7,7 +7,7 @@ var cors = require("cors");
 // Path to service account key JSON file
 const serviceAccount = require(path.join(
   __dirname,
-  "cloud-lab-task-1-2c614-firebase-adminsdk-7aosr-4849eb7f86.json"
+  "cloud-lab-task-1-2c614-firebase-adminsdk-7aosr-b1747b09ee.json"
 ));
 
 // Initialize Firebase Admin SDK with service account

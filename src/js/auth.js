@@ -80,6 +80,8 @@ function signInWithEmail() {
                       }
                     });
                   }
+
+                  window.location.href = "/src/pages/index.html";
                 } else {
                   console.error("Error updating first login status");
                 }
@@ -90,6 +92,9 @@ function signInWithEmail() {
                   error.message
                 );
               });
+          } else {
+            console.log("Returning user event");
+            window.location.href = "/src/pages/index.html";
           }
         })
         .catch((error) => {
