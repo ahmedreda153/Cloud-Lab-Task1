@@ -29,10 +29,10 @@ jobs:
       working-directory: ./nodejs
       run: npm install
 
-    # Build the FE app
-    - name: Build Frontend
-      working-directory: ./src
-      run: npm run build
+    # # Build the FE app
+    # - name: Build Frontend
+    #   working-directory: ./src
+    #   run: npm run build
 
     # Deploy to Firebase App Distribution
     - name: Deploy to Firebase App Distribution
