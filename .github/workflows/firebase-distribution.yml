@@ -40,12 +40,10 @@ jobs:
 
       # Firebase Authentication
       - name: Authenticate with Firebase
-        run: firebase login:ci --token ${{ secrets.FIREBASE_AUTH_TOKEN }}
+        run: firebase use --add --token ${{ secrets.FIREBASE_AUTH_TOKEN }}
 
       # Deploy to Firebase App Distribution
       - name: Deploy to Firebase App Distribution
         working-directory: ./src
-        env:
-          FIREBASE_AUTH_TOKEN: ${{ secrets.FIREBASE_AUTH_TOKEN }}
         run: |
-          firebase deploy --only hosting,appdistribution
+        firebase deploy --only hosting,appdistribution --token ${{ secrets.FIREBASE_AUTH_TOKEN }}
