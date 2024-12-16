@@ -38,17 +38,11 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # Authenticate with Firebase using Service Account Key
+      # Firebase Authentication
       - name: Authenticate with Firebase
-        run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" > $HOME/firebase-service-account.json
-          export GOOGLE_APPLICATION_CREDENTIALS=$HOME/firebase-service-account.json
+        run: firebase use --add --token ${{ secrets.FIREBASE_AUTH_TOKEN }}
 
-      # Set the Firebase project explicitly (use the project ID directly)
-      - name: Set Firebase Project
-        run: firebase use --add <cloud-lab-task-1-2c614> --alias default
-
-      # Deploy to Firebase Hosting and Firebase App Distribution
-      - name: Deploy to Firebase Hosting and App Distribution
+      # Deploy to Firebase App Distribution
+      - name: Deploy to Firebase App Distribution
         working-directory: ./src
-        run: firebase deploy --only hosting,appdistribution
+        run: firebase deploy --only hosting,appdistribution --token ${{ secrets.FIREBASE_AUTH_TOKEN }}
