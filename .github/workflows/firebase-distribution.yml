@@ -26,17 +26,17 @@ jobs:
 
     # Install dependencies for the FE
     - name: Install Dependencies
-      working-directory: ./FE
+      working-directory: ./nodejs
       run: npm install
 
     # Build the FE app
     - name: Build Frontend
-      working-directory: ./FE
+      working-directory: ./src
       run: npm run build
 
     # Deploy to Firebase App Distribution
     - name: Deploy to Firebase App Distribution
-      working-directory: ./FE
+      working-directory: ./src
       env:
         FIREBASE_AUTH_TOKEN: ${{ secrets.FIREBASE_AUTH_TOKEN }}
       run: |
