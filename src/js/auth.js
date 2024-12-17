@@ -64,7 +64,6 @@ function signInWithEmail() {
                     timestamp: Date.now(),
                   });
                   if ("Notification" in window) {
-                    // Request notification permission if not already granted
                     Notification.requestPermission().then((permission) => {
                       if (permission === "granted") {
                         const notification = new Notification("Welcome!", {
